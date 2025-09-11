@@ -9,6 +9,56 @@ import User from '../models/User.js'; // ✅ Import User model
 
 const router = express.Router();
 
+// ======================== Admin Sign Up========================
+
+
+// Admin signup
+router.post("/adminsignup", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // 1. Check if admin already exists
+    const existingAdmin = await Admin.findOne({ email });
+    if (existingAdmin) {
+      return res.json({ signupStatus: false, Error: "Admin already exists" });
+    }
+
+    // 2. Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 3. Create new admin
+    const newAdmin = new Admin({
+      email,
+      password: hashedPassword,
+      role: "admin"
+    });
+
+    await newAdmin.save();
+
+    // 4. Create token
+    const token = jwt.sign(
+      { role: "admin", email },
+      "jwt_secret_key",
+      { expiresIn: "1d" }
+    );
+
+    // 5. Set cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      sameSite: "Strict",
+      secure: false,
+      maxAge: 24 * 60 * 60 * 1000,
+    });
+
+    // 6. Respond success
+    res.json({ signupStatus: true, token });
+
+  } catch (err) {
+    console.error("Admin signup error:", err);
+    res.json({ signupStatus: false, Error: "Server Error" });
+  }
+});
+
 // ======================== Admin Login ========================
 router.post('/adminlogin', async (req, res) => {
   const { email, password } = req.body;
