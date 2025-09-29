@@ -26,8 +26,6 @@ const authenticateToken = (req, res, next) => {
 // ========================
 // POST /register (User Registration)
 // ========================
-// POST /register (User Registration)
-// ========================
 router.post("/register", async (req, res) => {
   try {
     const { full_name, email, password, phone } = req.body;
@@ -49,7 +47,7 @@ router.post("/register", async (req, res) => {
       password: hashedPassword,
       phone,
       status: "pending",
-      role: "passenger", // <-- changed from "user" to "passenger"
+      role: "passenger",
     });
 
     await newUser.save();
@@ -59,7 +57,6 @@ router.post("/register", async (req, res) => {
     res.status(500).json({ Status: false, Error: "Server error during registration" });
   }
 });
-
 
 // ========================
 // POST /login (User + Staff)
@@ -187,14 +184,14 @@ router.post("/add_user", async (req, res) => {
 });
 
 // ========================
-// GET /users?status=pending (Filter Users by Status)
+// GET /?status=pending (Filter Users by Status)
 // ========================
-router.get("/users", async (req, res) => {
+router.get("/", async (req, res) => {
   const { status } = req.query;
 
   try {
     const filter = status ? { status } : {};
-    const users = await User.find(filter).select("id full_name email phone status created_at");
+    const users = await User.find(filter).select("_id full_name email phone status created_at");
     res.json({ Status: true, Users: users });
   } catch (err) {
     console.error("Query users error:", err);
@@ -203,9 +200,9 @@ router.get("/users", async (req, res) => {
 });
 
 // ========================
-// PUT /users/:id/status (Update User Status)
+// PUT /:id/status (Update User Status)
 // ========================
-router.put("/users/:id/status", async (req, res) => {
+router.put("/:id/status", async (req, res) => {
   const { status } = req.body;
   const { id } = req.params;
 
