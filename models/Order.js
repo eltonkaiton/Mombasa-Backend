@@ -9,7 +9,7 @@ const orderSchema = new mongoose.Schema({
   amount: { type: Number },
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   finance_status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-  delivery_status: { type: String, enum: ['pending', 'delivered'], default: 'pending' },
+  delivery_status: { type: String, enum: ['pending', 'delivered','received'], default: 'pending' },
   delivered_at: { type: Date, default: null },              // <-- added delivered_at
   created_at: { type: Date, default: Date.now }
 });

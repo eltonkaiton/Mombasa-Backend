@@ -5,21 +5,23 @@ import dotenv from 'dotenv';
 import User from '../models/User.js';
 
 dotenv.config();
-
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'jwt_secret_key';
 
-// ==========================
-// POST /register
-// ==========================
+// ✅ Register
 router.post('/register', async (req, res) => {
+  const { full_name, email, phone, password } = req.body;
+
+  if (!full_name || !email || !phone || !password)
+    return res.status(400).json({ message: 'All fields are required' });
+
   try {
-    const { full_name, email, phone, password } = req.body;
+    // Check if user exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser)
+      return res.status(400).json({ message: 'Email already registered' });
 
-    const existing = await User.findOne({ email });
-    if (existing) {
-      return res.status(409).json({ error: 'Email already in use' });
-    }
-
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
@@ -27,49 +29,41 @@ router.post('/register', async (req, res) => {
       email,
       phone,
       password: hashedPassword,
-      status: 'pending',
-      role: 'user',
     });
 
     await newUser.save();
 
-    res.status(201).json({ message: 'Registration successful, pending approval.' });
+    res.status(201).json({ message: 'User registered successfully' });
   } catch (err) {
     console.error('Register error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
-// ==========================
-// POST /login
-// ==========================
+// ✅ Login
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
+  if (!email || !password)
+    return res.status(400).json({ message: 'Email and password required' });
 
   try {
     const user = await User.findOne({ email });
+    if (!user)
+      return res.status(400).json({ message: 'Invalid email or password' });
 
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    const passwordMatch = await bcrypt.compare(password, user.password);
+    if (!passwordMatch)
+      return res.status(400).json({ message: 'Invalid email or password' });
 
-    if (user.status !== 'active') {
-      return res.status(403).json({ error: 'Account not active. Please wait for approval.' });
-    }
-
-    const match = await bcrypt.compare(password, user.password);
-    if (!match) return res.status(401).json({ error: 'Invalid credentials' });
-
+    // Generate JWT
     const token = jwt.sign(
-      {
-        id: user._id,
-        full_name: user.full_name,
-        email: user.email,
-        role: user.role,
-      },
-      process.env.JWT_SECRET || 'jwt_secret_key',
-      { expiresIn: '1h' }
+      { id: user._id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '12h' }
     );
 
     res.json({
+      message: 'Login successful',
       token,
       user: {
         id: user._id,
@@ -81,7 +75,7 @@ router.post('/login', async (req, res) => {
     });
   } catch (err) {
     console.error('Login error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ message: 'Server error' });
   }
 });
 
