@@ -34,4 +34,14 @@ router.get('/', async (req, res) => {
   }
 });
 
+router.get('/payments', async (req, res) => {
+  try {
+    const orders = await Order.find().sort({ created_at: -1 });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching order payments' });
+  }
+});
+
+
 export default router;

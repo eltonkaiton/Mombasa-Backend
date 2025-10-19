@@ -33,6 +33,11 @@ router.post('/create', authenticateToken, async (req, res) => {
       ferry_name,
     } = req.body;
 
+    let payment_status = 'pending';
+    if (booking_type === 'passenger') {
+      payment_status = 'paid';
+    }
+
     const newBooking = new Booking({
       user_id: req.user.id,
       booking_type,
@@ -48,7 +53,7 @@ router.post('/create', authenticateToken, async (req, res) => {
       amount_paid,
       transaction_id,
       ferry_name: ferry_name || null,
-      payment_status: 'pending',
+      payment_status,
     });
 
     await newBooking.save();
@@ -75,7 +80,6 @@ router.get('/mybookings', authenticateToken, async (req, res) => {
 
     const { page = 1, limit = 10, booking_status } = req.query;
     const filters = { user_id: req.user.id };
-
     if (booking_status) filters.booking_status = booking_status;
 
     const bookings = await Booking.find(filters)
@@ -100,16 +104,14 @@ router.get('/mybookings', authenticateToken, async (req, res) => {
 });
 
 // =============================
-// Get Paid Bookings (Passenger/Crew)
+// Get Paid Bookings
 // =============================
 router.get('/paid', authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
     let filters = { payment_status: 'paid' };
 
-    if (req.user.role === 'passenger') {
-      filters.user_id = req.user.id;
-    }
+    if (req.user.role === 'passenger') filters.user_id = req.user.id;
 
     const bookings = await Booking.find(filters)
       .populate('user_id', 'full_name email')
@@ -133,6 +135,37 @@ router.get('/paid', authenticateToken, async (req, res) => {
 });
 
 // =============================
+// Get All Booking Payments (Admin/Finance)
+// =============================
+// 🚨 Placed ABOVE /:id to avoid CastError
+router.get('/payments', authenticateToken, async (req, res) => {
+  try {
+    if (!['admin', 'finance'].includes(req.user.role)) {
+      return res.status(401).json({ success: false, message: 'Unauthorized access' });
+    }
+
+    const payments = await Booking.find(
+      { payment_status: { $in: ['paid', 'completed'] } },
+      {
+        user_id: 1,
+        route: 1,
+        amount_paid: 1,
+        payment_method: 1,
+        payment_status: 1,
+        created_at: 1,
+      }
+    )
+      .populate('user_id', 'full_name email')
+      .sort({ created_at: -1 });
+
+    res.json({ success: true, payments });
+  } catch (err) {
+    console.error('Error fetching booking payments:', err);
+    res.status(500).json({ success: false, message: 'Error fetching booking payments' });
+  }
+});
+
+// =============================
 // Cancel Booking (Passenger)
 // =============================
 router.patch('/:id/cancel', authenticateToken, async (req, res) => {
@@ -142,19 +175,12 @@ router.patch('/:id/cancel', authenticateToken, async (req, res) => {
     }
 
     const booking = await Booking.findOne({ _id: req.params.id, user_id: req.user.id });
-
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
     booking.booking_status = 'cancelled';
     await booking.save();
 
-    res.json({
-      success: true,
-      message: 'Booking cancelled successfully',
-      booking,
-    });
+    res.json({ success: true, message: 'Booking cancelled successfully', booking });
   } catch (err) {
     console.error('Cancel booking error:', err);
     res.status(500).json({ success: false, message: 'Error cancelling booking' });
@@ -170,10 +196,7 @@ router.get('/:id/receipt/pdf', authenticateToken, async (req, res) => {
     if (req.user.role === 'passenger') bookingQuery.user_id = req.user.id;
 
     const booking = await Booking.findOne(bookingQuery).populate('user_id', 'full_name email');
-
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
     if (['approved', 'assigned'].includes(booking.booking_status) && booking.payment_status === 'paid') {
       const doc = new PDFDocument();
@@ -209,7 +232,7 @@ router.get('/:id/receipt/pdf', authenticateToken, async (req, res) => {
 
       doc.end();
     } else {
-      return res.status(403).json({
+      res.status(403).json({
         success: false,
         message: 'Receipt available only for approved/assigned and paid bookings',
       });
@@ -221,29 +244,21 @@ router.get('/:id/receipt/pdf', authenticateToken, async (req, res) => {
 });
 
 // =============================
-// Rate a Booking (Passenger)
+// Rate a Booking
 // =============================
 router.post('/rate', authenticateToken, async (req, res) => {
   try {
-    if (req.user.role !== 'passenger') {
+    if (req.user.role !== 'passenger')
       return res.status(403).json({ success: false, message: 'Only passengers can rate bookings' });
-    }
 
     const { bookingId, rating } = req.body;
-
-    if (!bookingId || !rating) {
+    if (!bookingId || !rating)
       return res.status(400).json({ success: false, message: 'Booking ID and rating are required' });
-    }
-
-    if (rating < 1 || rating > 5) {
+    if (rating < 1 || rating > 5)
       return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5' });
-    }
 
     const booking = await Booking.findOne({ _id: bookingId, user_id: req.user.id });
-
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found' });
-    }
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
 
     booking.ferry_rating = rating;
     await booking.save();
@@ -258,13 +273,10 @@ router.post('/rate', authenticateToken, async (req, res) => {
 // =============================
 // Admin/Staff Routes
 // =============================
-
-// Get all bookings
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+    if (!['admin', 'staff'].includes(req.user.role))
       return res.status(403).json({ success: false, message: 'Unauthorized' });
-    }
 
     const bookings = await Booking.find().populate('user_id', 'full_name email');
     res.json({ success: true, bookings });
@@ -277,14 +289,12 @@ router.get('/', authenticateToken, async (req, res) => {
 // Get booking by ID
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+    if (!['admin', 'staff'].includes(req.user.role))
       return res.status(403).json({ success: false, message: 'Unauthorized' });
-    }
 
     const booking = await Booking.findById(req.params.id).populate('user_id', 'full_name email');
-    if (!booking) {
-      return res.status(404).json({ success: false, message: 'Booking not found.' });
-    }
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
+
     res.json({ success: true, booking });
   } catch (err) {
     console.error(err);
@@ -295,20 +305,14 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // Update booking status
 router.put('/:id', authenticateToken, async (req, res) => {
   try {
-    if (req.user.role !== 'admin' && req.user.role !== 'staff') {
+    if (!['admin', 'staff'].includes(req.user.role))
       return res.status(403).json({ success: false, message: 'Unauthorized' });
-    }
 
     const { booking_status } = req.body;
-    const updated = await Booking.findByIdAndUpdate(
-      req.params.id,
-      { booking_status },
-      { new: true }
-    );
+    const updated = await Booking.findByIdAndUpdate(req.params.id, { booking_status }, { new: true });
 
-    if (!updated) {
+    if (!updated)
       return res.status(404).json({ success: false, message: 'Booking not found or not updated.' });
-    }
 
     res.json({ success: true, message: 'Booking updated successfully.', booking: updated });
   } catch (err) {
@@ -317,5 +321,48 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Named export to match index.js
+// Mark Booking as Arrived
+router.put('/:id/arrived', authenticateToken, async (req, res) => {
+  try {
+    if (!['staff', 'admin', 'passenger'].includes(req.user.role))
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+
+    let booking;
+    if (req.user.role === 'passenger')
+      booking = await Booking.findOne({ _id: req.params.id, user_id: req.user.id });
+    else booking = await Booking.findById(req.params.id);
+
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    booking.booking_status = 'arrived';
+    booking.arrival_time = new Date();
+    await booking.save();
+
+    res.json({ success: true, message: 'Booking marked as arrived successfully', booking });
+  } catch (err) {
+    console.error('Error marking booking as arrived:', err);
+    res.status(500).json({ success: false, message: 'Error marking booking as arrived' });
+  }
+});
+
+// Mark Booking as Delivered
+router.put('/:id/deliver', authenticateToken, async (req, res) => {
+  try {
+    if (!['service', 'staff', 'admin'].includes(req.user.role))
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+
+    booking.booking_status = 'delivered';
+    booking.delivery_time = new Date();
+    await booking.save();
+
+    res.json({ success: true, message: 'Booking marked as delivered successfully', booking });
+  } catch (err) {
+    console.error('Error marking booking as delivered:', err);
+    res.status(500).json({ success: false, message: 'Error marking booking as delivered' });
+  }
+});
+
 export const bookingRouter = router;

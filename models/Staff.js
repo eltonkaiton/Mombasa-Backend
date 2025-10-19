@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const staffSchema = new mongoose.Schema({
-  name: {   // ✅ keep "name" for consistency
+  name: {   
     type: String,
     required: true,
   },
@@ -17,9 +17,17 @@ const staffSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  salary: {
+    type: Number,
+    required: true,
+  },
+  address: {
+    type: String,
+    required: true,
+  },
   category: {
     type: String,
-    enum: ['staff', 'finance', 'inventory', 'admin', 'operating'], // ✅ standardized
+    enum: ['staff', 'finance', 'inventory', 'admin', 'operating'],
     required: true,
   },
   status: {

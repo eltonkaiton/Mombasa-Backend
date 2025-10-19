@@ -5,97 +5,221 @@ import { authenticateStaffToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// =======================
-// Get all ferries (Staff)
-// =======================
+/**
+ * ============================
+ * GET ALL FERRIES (STAFF ONLY)
+ * ============================
+ */
 router.get('/', authenticateStaffToken, async (req, res) => {
   try {
     const ferries = await Ferry.find().sort({ name: 1 });
-    res.json({ ferries });
-  } catch (err) {
-    console.error('Fetch ferries error:', err);
-    res.status(500).json({ message: 'Server error fetching ferries' });
+    res.json({ success: true, ferries });
+  } catch (error) {
+    console.error('❌ Error fetching ferries:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error fetching ferries',
+      error: error.message,
+    });
   }
 });
 
-// =======================
-// Add new ferry
-// =======================
+/**
+ * ============================
+ * ADD NEW FERRY
+ * ============================
+ */
 router.post('/', authenticateStaffToken, async (req, res) => {
   try {
     const { name, capacity } = req.body;
-    if (!name || !capacity)
-      return res.status(400).json({ message: 'Name and capacity are required' });
 
-    const existing = await Ferry.findOne({ name });
-    if (existing)
-      return res.status(400).json({ message: 'Ferry with this name already exists' });
+    if (!name || !capacity) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both name and capacity are required',
+      });
+    }
 
-    const ferry = new Ferry({ name, capacity });
-    await ferry.save();
+    const existingFerry = await Ferry.findOne({ name });
+    if (existingFerry) {
+      return res.status(400).json({
+        success: false,
+        message: 'A ferry with this name already exists',
+      });
+    }
 
-    res.json({ message: 'Ferry added successfully', ferry });
-  } catch (err) {
-    console.error('Add ferry error:', err);
-    res.status(500).json({ message: 'Server error adding ferry' });
+    const newFerry = new Ferry({ name, capacity });
+    await newFerry.save();
+
+    res.json({
+      success: true,
+      message: 'Ferry added successfully',
+      ferry: newFerry,
+    });
+  } catch (error) {
+    console.error('❌ Error adding ferry:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error adding ferry',
+      error: error.message,
+    });
   }
 });
 
-// =======================
-// Update ferry
-// =======================
+/**
+ * ============================
+ * UPDATE FERRY DETAILS
+ * ============================
+ */
 router.put('/:id', authenticateStaffToken, async (req, res) => {
   try {
-    const { name, capacity } = req.body;
-    const ferry = await Ferry.findByIdAndUpdate(
+    const { name, capacity, status } = req.body;
+
+    const updatedFerry = await Ferry.findByIdAndUpdate(
       req.params.id,
-      { name, capacity },
-      { new: true }
+      { name, capacity, status },
+      { new: true, runValidators: true }
     );
-    if (!ferry) return res.status(404).json({ message: 'Ferry not found' });
-    res.json({ message: 'Ferry updated successfully', ferry });
-  } catch (err) {
-    console.error('Update ferry error:', err);
-    res.status(500).json({ message: 'Server error updating ferry' });
+
+    if (!updatedFerry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ferry not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Ferry updated successfully',
+      ferry: updatedFerry,
+    });
+  } catch (error) {
+    console.error('❌ Error updating ferry:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error updating ferry',
+      error: error.message,
+    });
   }
 });
 
-// =======================
-// Delete ferry
-// =======================
+/**
+ * ============================
+ * DELETE FERRY
+ * ============================
+ */
 router.delete('/:id', authenticateStaffToken, async (req, res) => {
   try {
-    const ferry = await Ferry.findByIdAndDelete(req.params.id);
-    if (!ferry) return res.status(404).json({ message: 'Ferry not found' });
-    res.json({ message: 'Ferry deleted successfully' });
-  } catch (err) {
-    console.error('Delete ferry error:', err);
-    res.status(500).json({ message: 'Server error deleting ferry' });
+    const deletedFerry = await Ferry.findByIdAndDelete(req.params.id);
+
+    if (!deletedFerry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ferry not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Ferry deleted successfully',
+    });
+  } catch (error) {
+    console.error('❌ Error deleting ferry:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error deleting ferry',
+      error: error.message,
+    });
   }
 });
 
-// =======================
-// Assign ferry to a booking
-// =======================
+/**
+ * ============================
+ * ASSIGN FERRY TO BOOKING
+ * ============================
+ */
 router.post('/assign', authenticateStaffToken, async (req, res) => {
   try {
     const { ferryId, bookingId } = req.body;
-    if (!ferryId || !bookingId)
-      return res.status(400).json({ message: 'Ferry ID and Booking ID are required' });
+
+    if (!ferryId || !bookingId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Both ferryId and bookingId are required',
+      });
+    }
 
     const ferry = await Ferry.findById(ferryId);
-    if (!ferry) return res.status(404).json({ message: 'Ferry not found' });
+    if (!ferry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ferry not found',
+      });
+    }
 
     const booking = await Booking.findById(bookingId);
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    if (!booking) {
+      return res.status(404).json({
+        success: false,
+        message: 'Booking not found',
+      });
+    }
 
-    booking.ferry = ferry._id;
+    // ✅ Assign ferry name (since booking schema uses ferry_name)
+    booking.ferry_name = ferry.name;
+    booking.booking_status = 'assigned';
     await booking.save();
 
-    res.json({ message: 'Ferry assigned successfully', booking });
+    res.json({
+      success: true,
+      message: `Ferry '${ferry.name}' assigned successfully to booking`,
+      booking,
+    });
+  } catch (error) {
+    console.error('❌ Error assigning ferry:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error assigning ferry',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * ============================
+ * GET FERRY OCCUPANCY DETAILS
+ * ============================
+ */
+router.get('/occupancy', authenticateStaffToken, async (req, res) => {
+  try {
+    const ferries = await Ferry.find();
+    const bookings = await Booking.find({
+      booking_status: 'assigned',
+      ferry_name: { $ne: null },
+    });
+
+    const occupancyData = ferries.map(ferry => {
+      const assignedBookings = bookings.filter(b => b.ferry_name === ferry.name);
+      const occupied = assignedBookings.length;
+      const remaining = Math.max(0, ferry.capacity - occupied);
+      return {
+        _id: ferry._id,
+        name: ferry.name,
+        capacity: ferry.capacity,
+        occupied,
+        remaining,
+        status: ferry.status,
+      };
+    });
+
+    res.json({ success: true, ferries: occupancyData });
   } catch (err) {
-    console.error('Assign ferry error:', err);
-    res.status(500).json({ message: 'Server error assigning ferry' });
+    console.error("❌ Occupancy fetch error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Server error fetching occupancy data",
+      error: err.message,
+    });
   }
 });
 
