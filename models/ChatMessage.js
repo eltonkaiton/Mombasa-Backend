@@ -16,6 +16,7 @@ const chatMessageSchema = new mongoose.Schema({
   },
   message: { type: String, required: true },
   timestamp: { type: Date, default: Date.now },
+  read: { type: Boolean, default: false }, // ✅ Track if staff has read the message
 });
 
 const ChatMessage = mongoose.model("ChatMessage", chatMessageSchema);

@@ -9,7 +9,9 @@ import Order from '../models/Order.js';
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'jwt_secret_key';
 
+// ===========================
 // ✅ Supplier Login
+// ===========================
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
 
@@ -45,13 +47,15 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// ✅ Supplier fetches their own orders (with populated item name)
+// ===========================
+// ✅ Fetch supplier's orders
+// ===========================
 router.get('/orders', authenticateToken, async (req, res) => {
   try {
     const supplierId = req.user.id;
 
     const orders = await Order.find({ supplier_id: supplierId })
-      .populate('item_id', 'item_name') // only include item_name
+      .populate('item_id', 'item_name')
       .sort({ created_at: -1 });
 
     res.json(orders);
@@ -61,7 +65,9 @@ router.get('/orders', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Supplier accepts an order
+// ===========================
+// ✅ Accept order
+// ===========================
 router.put('/orders/:id/accept', authenticateToken, async (req, res) => {
   try {
     const supplierId = req.user.id;
@@ -82,7 +88,9 @@ router.put('/orders/:id/accept', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Supplier rejects an order
+// ===========================
+// ✅ Reject order
+// ===========================
 router.put('/orders/:id/reject', authenticateToken, async (req, res) => {
   try {
     const supplierId = req.user.id;
@@ -103,7 +111,9 @@ router.put('/orders/:id/reject', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Supplier submits supply with amount
+// ===========================
+// ✅ Submit supply with amount
+// ===========================
 router.put('/supply/:id', authenticateToken, async (req, res) => {
   const { amount } = req.body;
   const supplierId = req.user.id;
@@ -117,9 +127,8 @@ router.put('/supply/:id', authenticateToken, async (req, res) => {
       { new: true }
     );
 
-    if (!updated) {
+    if (!updated)
       return res.status(404).json({ message: 'Order not found or unauthorized' });
-    }
 
     res.json({ message: 'Supply submitted. Awaiting finance approval.', order: updated });
   } catch (error) {
@@ -128,7 +137,9 @@ router.put('/supply/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Finance approves/rejects supply amount
+// ===========================
+// ✅ Finance approves/rejects supply
+// ===========================
 router.put('/approve-finance/:id', authenticateToken, async (req, res) => {
   const { decision } = req.body;
 
@@ -152,7 +163,9 @@ router.put('/approve-finance/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Supplier marks order as delivered
+// ===========================
+// ✅ Mark order as delivered
+// ===========================
 router.put('/mark-delivered/:id', authenticateToken, async (req, res) => {
   const supplierId = req.user.id;
 
@@ -173,7 +186,9 @@ router.put('/mark-delivered/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// ✅ Inventory confirms order as received
+// ===========================
+// ✅ Inventory confirms order received
+// ===========================
 router.put('/mark-received/:id', authenticateToken, async (req, res) => {
   try {
     const updated = await Order.findOneAndUpdate(
@@ -189,6 +204,32 @@ router.put('/mark-received/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Confirm received error:', error);
     res.status(500).json({ message: 'Server error confirming received order' });
+  }
+});
+
+// ===========================
+// ✅ Supplier confirms payment
+// ===========================
+router.put('/confirm-payment/:id', authenticateToken, async (req, res) => {
+  try {
+    const supplierId = req.user.id;
+
+    const order = await Order.findOne({
+      _id: req.params.id,
+      supplier_id: supplierId,
+      payment_confirmation: 'pending',
+    });
+
+    if (!order)
+      return res.status(404).json({ message: 'Order not found or already marked as paid' });
+
+    order.payment_confirmation = 'received';
+    await order.save();
+
+    res.json({ message: 'Payment confirmed successfully', order });
+  } catch (err) {
+    console.error('Confirm payment error:', err);
+    res.status(500).json({ message: 'Server error confirming payment' });
   }
 });
 
