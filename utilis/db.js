@@ -1,8 +1,16 @@
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const connectDB = async () => {
   try {
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb+srv://kaiton254:kaiton254@cluster0.ytmxwnj.mongodb.net/Mombasa-Database?retryWrites=true&w=majority&appName=Cluster0');
+    if (!process.env.MONGO_URI) {
+      throw new Error("MONGO_URI is missing in .env");
+    }
+
+    await mongoose.connect(process.env.MONGO_URI);
+
     console.log('✅ MongoDB connected');
   } catch (err) {
     console.error('❌ MongoDB connection error:', err);
