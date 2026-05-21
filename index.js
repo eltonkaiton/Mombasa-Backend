@@ -29,7 +29,7 @@ const PORT = 5000;
 
 const allowedOrigins = [
   "http://localhost:5173",
-  "https://mombasa-backend.onrender.com",
+  "https://mombasa-backend-1.onrender.com",
 ];
 
 app.use(
